@@ -8,6 +8,9 @@ from selenium import webdriver
 from selenium.webdriver.chrome.options import Options
 import duckdb
 import os
+from googleapiclient.discovery import build
+from google.oauth2.service_account import Credentials
+from googleapiclient.http import MediaFileUpload
 
 current_dir = os.path.dirname(os.path.abspath(__file__))
 
@@ -21,7 +24,6 @@ def bypass_cloudflare():
         "--user-agent=Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
     )
     options.add_argument("--headless")
-    options.binary_location = "/usr/bin/chromium"
 
     service = webdriver.ChromeService(executable_path="/usr/bin/chromedriver")
     driver = webdriver.Chrome(service=service, options=options)
@@ -60,6 +62,23 @@ def check_if_keyword_in_name(keyword, name):
         return False
     else:
         return have_all_keyword
+
+
+def upload_results_to_drive(credentials_path, file_path, folder_id=None):
+
+    # Upload to Drive
+    filename = os.path.basename(file_path)
+    creds = Credentials.from_service_account_file(credentials_path)
+    service = build("drive", "v3", credentials=creds)
+
+    file_metadata = {"name": filename}
+    if folder_id:
+        file_metadata["parents"] = [folder_id]
+    print(file_metadata)
+    media = MediaFileUpload(file_path)
+    file = service.files().create(body=file_metadata, media_body=media).execute()
+
+    return file
 
 
 class BaseScraping:

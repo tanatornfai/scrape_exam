@@ -8,7 +8,11 @@ from airflow.providers.standard.operators.python import (
 )
 from airflow.sdk import DAG
 import duckdb
-from helper import HomeProProductScraping, PowerBuyProductScraping
+from helper import (
+    HomeProProductScraping,
+    PowerBuyProductScraping,
+    upload_results_to_drive,
+)
 import pandas as pd
 
 keyword = "TV Samsung"
@@ -50,12 +54,7 @@ def compare_product_price():
             GROUP BY product_id, monitor_size) x
             """,
         con=conn,
-    )
-    conn.execute(
-        "CREATE TABLE IF NOT EXISTS compare_result AS SELECT * FROM compare_df"
-    )
-    conn.execute("INSERT INTO compare_result SELECT * FROM compare_df")
-    print(len(compare_df))
+    ).to_csv(os.path.join(current_dir, "tmp/compare_price.csv"), index=False)
 
 
 with DAG(
@@ -84,8 +83,18 @@ with DAG(
         task_id="compare_product_price",
         python_callable=compare_product_price,
     )
+    upload_results_to_drive_task = PythonOperator(
+        task_id="upload_results_to_drive",
+        python_callable=upload_results_to_drive,
+        op_kwargs={
+            "credentials_path": os.path.join(current_dir, "service_account.json"),
+            "file_path": os.path.join(current_dir, "tmp/compare_price.csv"),
+            "folder_id": "1SaBmZ-jwPOhIl2uKvyShdE7k_cYOaZ6I",
+        },
+    )
     (
         setup_databases_task
         >> [scrape_homepro_task, scrape_powerbuy_task]
         >> compare_product_price_task
+        >> upload_results_to_drive_task
     )
